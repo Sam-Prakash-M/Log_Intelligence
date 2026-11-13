@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: log-intelligence
+  threads:
+    virtual:
+      enabled: true          # Tomcat, Kafka listeners and @Scheduled all run on virtual threads
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/logintel}
+    username: ${DB_USERNAME:logintel}
+    password: ${DB_PASSWORD:logintel}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate     # schema is owned by Flyway (db/migration)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      acks: all
+      compression-type: lz4
+      properties:
+        enable.idempotence: true
+        linger.ms: 20
+        batch.size: 65536
+    consumer:
+      auto-offset-reset: earliest
+      max-poll-records: 500
+  mvc:
+    problemdetails:
+      enabled: true          # RFC 9457 error bodies
+
+server:
+  port: 8080
+  shutdown: graceful
+
+logging:
+  level:
+    org.apache.kafka: WARN   # the clients log every rebalance step at INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+pipeline:
+  topics:
+    raw-logs: logs.raw
+    analysis-requests: incidents.analysis
+    partitions: 6            # upper bound for parallel consumers per group
+    replicas: 1
+  correlation:
+    window: 10m              # sliding window: same signature within it joins the open incident
+    min-level: WARN          # events below this level are counted but never open incidents
+    sample-limit: 5          # log samples persisted per incident (LLM evidence)
+    concurrency: 3           # consumer threads per instance for logs.raw
+    auto-resolve-after: 2h   # incidents with no new events for this long are resolved
+  llm:
+    enabled: ${LLM_ENABLED:true}
+    api-key: ${ANTHROPIC_API_KEY:}   # blank -> rule-based analyzer only
+    model: ${LLM_MODEL:claude-opus-5-5}
+    max-tokens: 16000
+    timeout: 90s
+    cache-ttl: 24h           # verdict cache per signature, shared across instances
+    concurrency: 2
+  simulator:
+    enabled: ${SIMULATOR_ENABLED:false}

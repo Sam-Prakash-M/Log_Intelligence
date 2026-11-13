@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log Intelligence</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.04);
+    --series-1: #2a78d6; --series-2: #eb6834;
+    --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.05);
+      --series-1: #3987e5; --series-2: #d95926;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 16px 24px; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--ink-2); }
+  .meta { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  main { padding: 0 24px 32px; display: grid; gap: 16px; max-width: 1400px; margin: 0 auto; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .tiles { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .tile .value { font-size: 30px; font-weight: 600; line-height: 1.1; }
+  .tile .label { color: var(--ink-2); font-size: 12px; margin-bottom: 6px; }
+  .tile .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .row { display: grid; gap: 16px; grid-template-columns: 2fr 1fr 1fr; }
+  @media (max-width: 1000px) { .row { grid-template-columns: 1fr; } }
+  button, select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
+                   border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { background: var(--wash); }
+  button:disabled { opacity: .5; cursor: default; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  #chart { position: relative; }
+  #chart svg { display: block; width: 100%; height: 220px; }
+  .tooltip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+             border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+             white-space: nowrap; display: none; }
+  .bars { display: grid; gap: 8px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 40px; gap: 8px; align-items: center; font-size: 12px; }
+  .bar-row .name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-row .track { height: 10px; }
+  .bar-row .fill { height: 10px; border-radius: 0 4px 4px 0; min-width: 2px; background: var(--series-1); }
+  .bar-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); font-size: 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 12px; padding: 6px 10px;
+       border-bottom: 1px solid var(--axis); white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--wash); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.title { max-width: 460px; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .tag { display: inline-block; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; font-size: 12px;
+         color: var(--ink-2); white-space: nowrap; }
+  dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--ink);
+           width: min(860px, 94vw); max-height: 88vh; padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog h3 { margin: 0 0 4px; font-size: 16px; overflow-wrap: anywhere; }
+  dl { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; margin: 16px 0; }
+  dt { color: var(--ink-2); font-size: 12px; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  pre { background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px;
+        overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 12px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+  #error { color: var(--critical); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Log Intelligence</h1>
+  <span class="meta" id="analyzer"></span>
+  <span class="spacer"></span>
+  <span id="error" role="status"></span>
+  <span class="meta" id="served"></span>
+  <button id="simulate" hidden>Simulate 2,000 logs</button>
+</header>
+
+<main>
+  <section class="tiles">
+    <div class="card tile"><div class="label">Open incidents</div><div class="value" id="t-open">–</div>
+      <div class="hint" id="t-ack"></div></div>
+    <div class="card tile"><div class="label">Critical or high, unresolved</div><div class="value" id="t-urgent">–</div>
+      <div class="hint">need attention first</div></div>
+    <div class="card tile"><div class="label">Logs ingested, last 30 min</div><div class="value" id="t-ingested">–</div>
+      <div class="hint" id="t-rate"></div></div>
+    <div class="card tile"><div class="label">Noise reduction</div><div class="value" id="t-dedup">–</div>
+      <div class="hint" id="t-dedup-hint"></div></div>
+  </section>
+
+  <section class="row">
+    <div class="card">
+      <h2>Log events per minute, all instances</h2>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--series-1)"></span>Ingested</span>
+        <span><span class="swatch" style="background:var(--series-2)"></span>Correlated (WARN and above)</span>
+      </div>
+      <div id="chart"><svg role="img" aria-label="Log events per minute over the last 30 minutes"></svg>
+        <div class="tooltip" id="tip"></div></div>
+    </div>
+    <div class="card"><h2>Unresolved incidents by severity</h2><div class="bars" id="by-severity"></div></div>
+    <div class="card"><h2>Unresolved incidents by root cause</h2><div class="bars" id="by-category"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="filters">
+      <h2 style="margin:0">Incidents</h2><span class="spacer"></span>
+      <label>Status <select id="f-status"><option value="">All</option><option>OPEN</option>
+        <option>ACKNOWLEDGED</option><option>RESOLVED</option></select></label>
+      <label>Severity <select id="f-severity"><option value="">All</option><option>CRITICAL</option>
+        <option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label>
+      <label>Service <select id="f-service"><option value="">All</option></select></label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Severity</th><th>Service</th><th>Incident</th><th>Root cause</th><th>Status</th>
+          <th style="text-align:right">Events</th><th>Last seen</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="no-rows" hidden>No incidents match. Send logs to POST /api/v1/logs to get started.</p>
+  </section>
+</main>
+
+<dialog id="detail"></dialog>
+
+<script>
+"use strict";
+const SEVERITY = { CRITICAL: "var(--critical)", HIGH: "var(--serious)", MEDIUM: "var(--warning)", LOW: "var(--good)" };
+const $ = id => document.getElementById(id);
+const fmt = new Intl.NumberFormat();
+const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" });
+const pretty = s => s ? s.charAt(0) + s.slice(1).toLowerCase().replaceAll("_", " ") : "";
+
+// All API strings originate from application logs, so they only ever reach the DOM as text nodes.
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "style") node.style.cssText = v; else if (k === "class") node.className = v; else node[k] = v;
+  }
+  for (const c of children) if (c != null) node.append(c);
+  return node;
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  if (!res.ok) throw new Error(`${path} returned HTTP ${res.status}`);
+  return res.json();
+}
+
+function ago(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `${Math.floor(s)}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function severityBadge(severity) {
+  return el("span", { class: "badge" }, el("span", { class: "dot", style: `background:${SEVERITY[severity]}` }),
+    pretty(severity));
+}
+
+function renderBars(target, entries, color) {
+  const max = Math.max(1, ...entries.map(e => e.value));
+  target.replaceChildren(...(entries.length ? entries.map(e => el("div", { class: "bar-row", title: `${e.label}: ${fmt.format(e.value)}` },
+    el("span", { class: "name" }, e.label),
+    el("div", { class: "track" }, el("div", { class: "fill", style: `width:${e.value / max * 100}%;background:${e.color || color}` })),
+    el("span", { class: "num" }, fmt.format(e.value))))
+    : [el("p", { class: "empty" }, "Nothing unresolved.")]));
+}
+
+let series = null;
+function renderChart() {
+  if (!series) return;
+  const svg = document.querySelector("#chart svg");
+  const W = svg.clientWidth || 600, H = 220, m = { l: 44, r: 12, t: 10, b: 24 };
+  const n = series.ingested.length;
+  const max = Math.max(4, ...series.ingested.map(p => p.value), ...series.correlated.map(p => p.value));
+  const step = Math.pow(10, Math.floor(Math.log10(max / 4)));
+  const tick = [1, 2, 5, 10].map(k => k * step).find(t => max / t <= 4);
+  const top = Math.ceil(max / tick) * tick;
+  const x = i => m.l + (W - m.l - m.r) * (n === 1 ? 0 : i / (n - 1));
+  const y = v => m.t + (H - m.t - m.b) * (1 - v / top);
+  const ns = "http://www.w3.org/2000/svg";
+  const s = (tag, attrs, text) => { const e = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
+  const line = pts => pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
+
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.replaceChildren();
+  for (let v = 0; v <= top; v += tick) {
+    svg.append(s("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: v ? "var(--grid)" : "var(--axis)" }));
+    svg.append(s("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)" }, fmt.format(v)));
+  }
+  for (let i = 0; i < n; i += Math.ceil(n / 6)) {
+    svg.append(s("text", { x: x(i), y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" },
+      time.format(new Date(series.ingested[i].minute))));
+  }
+  svg.append(s("path", { d: line(series.ingested), fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round" }));
+  svg.append(s("path", { d: line(series.correlated), fill: "none", stroke: "var(--series-2)", "stroke-width": 2, "stroke-linejoin": "round" }));
+  const cross = s("line", { y1: m.t, y2: H - m.b, stroke: "var(--axis)", visibility: "hidden" });
+  const d1 = s("circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
+  const d2 = s("circle", { r: 4, fill: "var(--series-2)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
+  svg.append(cross, d1, d2);
+
+  const tip = $("tip");
+  svg.onmousemove = ev => {
+    const box = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(n - 1, Math.round((ev.clientX - box.left - m.l) / (W - m.l - m.r) * (n - 1))));
+    const a = series.ingested[i], b = series.correlated[i];
+    for (const [node, attrs] of [[cross, { x1: x(i), x2: x(i) }], [d1, { cx: x(i), cy: y(a.value) }], [d2, { cx: x(i), cy: y(b.value) }]]) {
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      node.setAttribute("visibility", "visible");
+    }
+    tip.replaceChildren(el("div", { class: "sub" }, time.format(new Date(a.minute))),
+      el("div", {}, el("span", { class: "swatch", style: "background:var(--series-1)" }), `Ingested ${fmt.format(a.value)}`),
+      el("div", {}, el("span", { class: "swatch", style: "background:var(--series-2)" }), `Correlated ${fmt.format(b.value)}`));
+    tip.style.display = "block";
+    const left = x(i) + 12 + tip.offsetWidth > W ? x(i) - 12 - tip.offsetWidth : x(i) + 12;
+    tip.style.left = `${left}px`; tip.style.top = `${m.t}px`;
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; for (const node of [cross, d1, d2]) node.setAttribute("visibility", "hidden"); };
+}
+
+async function refreshStats() {
+  const st = await api("/api/v1/stats?minutes=30");
+  const sev = st.activeBySeverity;
+  const ingested = st.ingested.reduce((a, p) => a + p.value, 0);
+  const correlated = st.correlated.reduce((a, p) => a + p.value, 0);
+  const active = st.byStatus.OPEN + st.byStatus.ACKNOWLEDGED;
+  const activeEvents = st.activeByService.reduce((a, s) => a + s.occurrences, 0);
+
+  $("t-open").textContent = fmt.format(st.byStatus.OPEN);
+  $("t-ack").textContent = `${fmt.format(st.byStatus.ACKNOWLEDGED)} acknowledged · ${fmt.format(st.byStatus.RESOLVED)} resolved`;
+  $("t-urgent").textContent = fmt.format(sev.CRITICAL + sev.HIGH);
+  $("t-ingested").textContent = fmt.format(ingested);
+  $("t-rate").textContent = `${fmt.format(correlated)} were WARN or above`;
+  $("t-dedup").textContent = active && activeEvents ? `${fmt.format(Math.round(activeEvents / active))} : 1` : "–";
+  $("t-dedup-hint").textContent = active ? `${fmt.format(activeEvents)} events folded into ${fmt.format(active)} unresolved incidents` : "no unresolved incidents";
+  $("analyzer").textContent = st.analyzer.llm ? `Analysis: ${st.analyzer.model}` : "Analysis: rule-based (no LLM key configured)";
+  $("served").textContent = `served by ${st.servedBy}`;
+  $("simulate").hidden = !st.simulatorEnabled;
+
+  renderBars($("by-severity"), ["CRITICAL", "HIGH", "MEDIUM", "LOW"].map(k => ({ label: pretty(k), value: sev[k], color: SEVERITY[k] })));
+  renderBars($("by-category"), Object.entries(st.activeByCategory).map(([k, v]) => ({ label: pretty(k), value: v }))
+    .sort((a, b) => b.value - a.value), "var(--series-1)");
+
+  const select = $("f-service"), current = select.value;
+  const names = st.activeByService.map(s => s.service);
+  if (current && !names.includes(current)) names.push(current);
+  select.replaceChildren(el("option", { value: "" }, "All"), ...names.sort().map(n => el("option", {}, n)));
+  select.value = current;
+
+  series = { ingested: st.ingested, correlated: st.correlated };
+  renderChart();
+}
+
+async function refreshIncidents() {
+  const q = new URLSearchParams({ size: 50 });
+  for (const [k, id] of [["status", "f-status"], ["severity", "f-severity"], ["service", "f-service"]]) if ($(id).value) q.set(k, $(id).value);
+  const page = await api(`/api/v1/incidents?${q}`);
+  $("no-rows").hidden = page.items.length > 0;
+  $("rows").replaceChildren(...page.items.map(i => {
+    const row = el("tr", {},
+      el("td", {}, severityBadge(i.severity)),
+      el("td", {}, i.service),
+      el("td", { class: "title" }, el("div", {}, i.title), i.rootCauseSummary ? el("div", { class: "sub" }, i.rootCauseSummary) : null),
+      el("td", {}, i.analysisStatus === "PENDING" ? el("span", { class: "sub" }, "analysing…") : el("span", { class: "tag" }, pretty(i.rootCauseCategory))),
+      el("td", {}, pretty(i.status)),
+      el("td", { class: "num" }, fmt.format(i.occurrenceCount)),
+      el("td", { class: "num", title: dateTime.format(new Date(i.lastSeen)) }, ago(i.lastSeen)));
+    row.onclick = () => openDetail(i.id);
+    return row;
+  }));
+}
+
+async function openDetail(id) {
+  const { incident: i, samples } = await api(`/api/v1/incidents/${id}`);
+  const act = (label, fn) => { const b = el("button", {}, label); b.onclick = async () => { b.disabled = true; try { await fn(); await refresh(); await openDetail(id); } catch (e) { showError(e); } }; return b; };
+  const setStatus = status => api(`/api/v1/incidents/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  const close = el("button", {}, "Close"); close.onclick = () => $("detail").close();
+  const row = (k, v) => v == null || v === "" ? [] : [el("dt", {}, k), el("dd", {}, v)];
+
+  $("detail").replaceChildren(
+    el("h3", {}, i.title),
+    el("div", { class: "sub" }, `${i.service} · ${pretty(i.status)} · ${fmt.format(i.occurrenceCount)} events`),
+    el("dl", {},
+      ...row("Severity", severityBadge(i.severity)),
+      ...row("Root cause", i.analysisStatus === "PENDING" ? "analysing…" : pretty(i.rootCauseCategory)),
+      ...row("Summary", i.rootCauseSummary),
+      ...row("Suggested action", i.suggestedAction),
+      ...row("Confidence", i.confidence == null ? null : `${Math.round(i.confidence * 100)}%`),
+      ...row("Analysed by", i.analyzedBy),
+      ...row("Exception", i.exceptionType),
+      ...row("First seen", dateTime.format(new Date(i.firstSeen))),
+      ...row("Last seen", dateTime.format(new Date(i.lastSeen))),
+      ...row("Signature", i.fingerprint)),
+    el("h2", {}, `Sample events (${samples.length})`),
+    ...samples.map(s => el("pre", {}, `${s.timestamp} ${s.level}${s.host ? " " + s.host : ""}\n${s.message}${s.stackTrace ? "\n" + s.stackTrace : ""}`)),
+    el("div", { class: "actions" },
+      act("Re-analyse", () => api(`/api/v1/incidents/${id}/reanalyze`, { method: "POST" })),
+      i.status === "OPEN" ? act("Acknowledge", () => setStatus("ACKNOWLEDGED")) : null,
+      i.status !== "RESOLVED" ? act("Resolve", () => setStatus("RESOLVED")) : act("Reopen", () => setStatus("OPEN")),
+      close));
+  if (!$("detail").open) $("detail").showModal();
+}
+
+function showError(e) { $("error").textContent = e ? String(e.message || e) : ""; }
+async function refresh() {
+  try { await Promise.all([refreshStats(), refreshIncidents()]); showError(null); } catch (e) { showError(e); }
+}
+
+for (const id of ["f-status", "f-severity", "f-service"]) $(id).onchange = refresh;
+$("simulate").onclick = async () => {
+  $("simulate").disabled = true;
+  try { await api("/api/v1/simulate?count=2000", { method: "POST" }); } catch (e) { showError(e); }
+  setTimeout(() => { $("simulate").disabled = false; refresh(); }, 1500);
+};
+window.addEventListener("resize", renderChart);
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

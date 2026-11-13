@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: log-intelligence
+    metrics_path: /actuator/prometheus
+    # DNS discovery finds every app replica, including ones added by --scale.
+    dns_sd_configs:
+      - names: ["app"]
+        type: A
+        port: 8080
+        refresh_interval: 10s

@@ -1,0 +1,130 @@
+{
+  "uid": "log-intelligence",
+  "title": "Log Intelligence Pipeline",
+  "tags": ["log-intelligence"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "App instances up",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "count(up{job=\"log-intelligence\"} == 1)" }],
+      "options": { "colorMode": "none", "graphMode": "none" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Logs consumed (range)",
+      "gridPos": { "x": 4, "y": 0, "w": 5, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(logintel_logs_consumed_total[$__range]))" }],
+      "fieldConfig": { "defaults": { "decimals": 0 } },
+      "options": { "colorMode": "none", "graphMode": "none" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Incidents opened (range)",
+      "gridPos": { "x": 9, "y": 0, "w": 5, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(logintel_incidents_opened_total[$__range]))" }],
+      "fieldConfig": { "defaults": { "decimals": 0 } },
+      "options": { "colorMode": "none", "graphMode": "none" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Malformed records dead-lettered (range)",
+      "gridPos": { "x": 14, "y": 0, "w": 5, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(logintel_logs_malformed_total[$__range]))" }],
+      "fieldConfig": { "defaults": { "decimals": 0 } },
+      "options": { "colorMode": "none", "graphMode": "none" }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Analysis cache hits (range)",
+      "gridPos": { "x": 19, "y": 0, "w": 5, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(logintel_analysis_cache_hits_total[$__range]))" }],
+      "fieldConfig": { "defaults": { "decimals": 0 } },
+      "options": { "colorMode": "none", "graphMode": "none" }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Log throughput (events/s)",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(logintel_logs_accepted_total[1m]))", "legendFormat": "accepted by API" },
+        { "refId": "B", "expr": "sum(rate(logintel_logs_consumed_total[1m]))", "legendFormat": "consumed" },
+        { "refId": "C", "expr": "sum(rate(logintel_logs_correlated_total[1m]))", "legendFormat": "correlated (WARN+)" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "min": 0 } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Logs consumed per instance (events/s)",
+      "description": "Kafka spreads partitions over the running instances; lines appear and even out as you scale.",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (instance) (rate(logintel_logs_consumed_total[1m]))", "legendFormat": "{{instance}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "min": 0 } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Consumer lag (records, max per consumer)",
+      "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max by (client_id) (kafka_consumer_fetch_manager_records_lag_max)", "legendFormat": "{{client_id}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0 } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Incidents opened per minute, by initial severity",
+      "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (severity) (increase(logintel_incidents_opened_total[1m]))", "legendFormat": "{{severity}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0 } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Analysis duration (mean seconds, by source)",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (source) (rate(logintel_analysis_seconds_sum[5m])) / sum by (source) (rate(logintel_analysis_seconds_count[5m]))", "legendFormat": "{{source}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0 } }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "JVM heap used per instance",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (instance) (jvm_memory_used_bytes{area=\"heap\"})", "legendFormat": "{{instance}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 } }
+    }
+  ]
+}
