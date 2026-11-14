@@ -5,7 +5,7 @@ spring:
     virtual:
       enabled: true          # Tomcat, Kafka listeners and @Scheduled all run on virtual threads
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/logintel}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/logintel}
     username: ${DB_USERNAME:logintel}
     password: ${DB_PASSWORD:logintel}
   jpa:

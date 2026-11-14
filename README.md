@@ -97,7 +97,7 @@ docker compose up -d kafka postgres redis
 ```
 
 The defaults in [application.yaml](src/main/resources/application.yaml) point at those containers
-(Kafka on `localhost:29092`). Set `SIMULATOR_ENABLED=true` to get the simulate button.
+(Kafka on `localhost:29092`, PostgreSQL on `localhost:5433`). Set `SIMULATOR_ENABLED=true` to get the simulate button.
 
 ## API
 
